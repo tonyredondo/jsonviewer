@@ -1,6 +1,7 @@
 import { store } from '../utils/store.js';
 import { SourceTab } from './SourceTab.js';
 import { ViewerTab } from './ViewerTab.js';
+import { CompareTab } from './CompareTab.js';
 
 export class App {
   constructor() {
@@ -36,11 +37,13 @@ export class App {
       <nav class="tabs-container">
         <button class="tab active" data-tab="source">Source</button>
         <button class="tab" data-tab="viewer">Viewer</button>
+        <button class="tab" data-tab="compare">Compare</button>
       </nav>
       
       <main class="main-content">
         <div class="tab-panel active" id="tab-source"></div>
         <div class="tab-panel" id="tab-viewer"></div>
+        <div class="tab-panel" id="tab-compare"></div>
       </main>
     `;
 
@@ -56,12 +59,15 @@ export class App {
     // Mount child components
     const sourcePanel = this.container.querySelector('#tab-source');
     const viewerPanel = this.container.querySelector('#tab-viewer');
+    const comparePanel = this.container.querySelector('#tab-compare');
     
     this.sourceTab = new SourceTab();
     this.viewerTab = new ViewerTab();
+    this.compareTab = new CompareTab();
     
     this.sourceTab.mount(sourcePanel);
     this.viewerTab.mount(viewerPanel);
+    this.compareTab.mount(comparePanel);
   }
 
   setupThemeToggle() {
