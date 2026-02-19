@@ -6,6 +6,8 @@ export class CompareTab {
     this.container = null;
     this.jsonA = null;
     this.jsonB = null;
+    this.currentView = 'structured'; // 'structured' or 'git'
+    this.lastDiff = null;
   }
 
   mount(element) {
@@ -22,10 +24,13 @@ export class CompareTab {
     this.container.innerHTML = `
       <div class="compare-container">
         <div class="compare-inputs">
-          <div class="compare-panel">
+          <div class="compare-panel" id="panel-a">
             <div class="compare-header">
               <span class="compare-label">JSON A</span>
               <span class="compare-status" id="status-a"></span>
+            </div>
+            <div class="compare-loading" id="loading-a" style="display: none;">
+              <span class="loading-spinner"></span> Loading...
             </div>
             <textarea 
               class="compare-textarea" 
@@ -35,10 +40,13 @@ export class CompareTab {
             ></textarea>
           </div>
           
-          <div class="compare-panel">
+          <div class="compare-panel" id="panel-b">
             <div class="compare-header">
               <span class="compare-label">JSON B</span>
               <span class="compare-status" id="status-b"></span>
+            </div>
+            <div class="compare-loading" id="loading-b" style="display: none;">
+              <span class="loading-spinner"></span> Loading...
             </div>
             <textarea 
               class="compare-textarea" 
@@ -53,6 +61,13 @@ export class CompareTab {
           <button class="btn primary" id="btn-compare">Compare JSONs</button>
           <button class="toolbar-btn" id="btn-clear-compare">Clear</button>
           <div style="flex: 1;"></div>
+          <div class="view-selector">
+            <label>View:</label>
+            <select id="view-mode">
+              <option value="structured">Structured</option>
+              <option value="git">Git Diff</option>
+            </select>
+          </div>
           <div class="compare-legend">
             <span class="legend-item added">Added</span>
             <span class="legend-item removed">Removed</span>
@@ -78,6 +93,7 @@ export class CompareTab {
     const btnClear = this.container.querySelector('#btn-clear-compare');
     const statusA = this.container.querySelector('#status-a');
     const statusB = this.container.querySelector('#status-b');
+    const viewMode = this.container.querySelector('#view-mode');
 
     // Auto-validate on input
     const validate = (textarea, status) => {
@@ -126,23 +142,33 @@ export class CompareTab {
       statusB.textContent = '';
       this.jsonA = null;
       this.jsonB = null;
+      this.lastDiff = null;
       this.renderEmptyState();
     });
 
+    // View mode selector
+    viewMode.addEventListener('change', (e) => {
+      this.currentView = e.target.value;
+      if (this.lastDiff) {
+        this.renderDiff(this.lastDiff);
+      }
+    });
+
     // Setup drag & drop for both panels
-    this.setupDragDrop(textareaA, statusA, (content) => {
+    this.setupDragDrop('panel-a', 'json-a', 'loading-a', 'status-a', (content) => {
       textareaA.value = content;
       this.jsonA = validate(textareaA, statusA);
     });
     
-    this.setupDragDrop(textareaB, statusB, (content) => {
+    this.setupDragDrop('panel-b', 'json-b', 'loading-b', 'status-b', (content) => {
       textareaB.value = content;
       this.jsonB = validate(textareaB, statusB);
     });
   }
 
-  setupDragDrop(textarea, status, onLoad) {
-    const panel = textarea.closest('.compare-panel');
+  setupDragDrop(panelId, textareaId, loadingId, statusId, onLoad) {
+    const panel = this.container.querySelector(`#${panelId}`);
+    const loading = this.container.querySelector(`#${loadingId}`);
     
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
       panel.addEventListener(eventName, (e) => {
@@ -170,9 +196,17 @@ export class CompareTab {
       if (files.length > 0) {
         const file = files[0];
         if (file.type === 'application/json' || file.name.endsWith('.json')) {
+          // Show loading
+          loading.style.display = 'flex';
+          
           const reader = new FileReader();
           reader.onload = (e) => {
+            // Hide loading
+            loading.style.display = 'none';
             onLoad(e.target.result);
+          };
+          reader.onerror = () => {
+            loading.style.display = 'none';
           };
           reader.readAsText(file);
         }
@@ -182,6 +216,7 @@ export class CompareTab {
 
   performCompare() {
     const diff = this.compareObjects(this.jsonA, this.jsonB, '');
+    this.lastDiff = diff;
     this.renderDiff(diff);
   }
 
@@ -278,6 +313,14 @@ export class CompareTab {
   }
 
   renderDiff(differences) {
+    if (this.currentView === 'git') {
+      this.renderGitDiff(differences);
+    } else {
+      this.renderStructuredDiff(differences);
+    }
+  }
+
+  renderStructuredDiff(differences) {
     const container = this.container.querySelector('#compare-results');
     
     if (differences.length === 0) {
@@ -315,6 +358,94 @@ export class CompareTab {
 
     html += '</div>';
     container.innerHTML = html;
+  }
+
+  renderGitDiff(differences) {
+    const container = this.container.querySelector('#compare-results');
+    
+    if (differences.length === 0) {
+      container.innerHTML = `
+        <div class="compare-no-diff">
+          <div class="compare-no-diff-icon">✓</div>
+          <div class="compare-no-diff-text">No differences found!</div>
+          <div class="compare-no-diff-hint">Both JSONs are identical</div>
+        </div>
+      `;
+      return;
+    }
+
+    // Group by type
+    const added = differences.filter(d => d.type === 'added');
+    const removed = differences.filter(d => d.type === 'removed');
+    const modified = differences.filter(d => d.type === 'modified');
+
+    let html = '<div class="git-diff-container">';
+    
+    // Summary
+    html += `
+      <div class="compare-summary">
+        <span class="summary-item added">${added.length} added</span>
+        <span class="summary-item removed">${removed.length} removed</span>
+        <span class="summary-item modified">${modified.length} modified</span>
+        <span class="summary-item total">${differences.length} total</span>
+      </div>
+    `;
+
+    html += '<div class="git-diff-content">';
+
+    // Render each difference as git-style lines
+    differences.forEach(diff => {
+      const lines = this.diffToGitLines(diff);
+      lines.forEach(line => {
+        html += `<div class="git-line ${line.type}"><span class="git-prefix">${line.prefix}</span><span class="git-text">${this.escapeHtml(line.text)}</span></div>`;
+      });
+    });
+
+    html += '</div></div>';
+    container.innerHTML = html;
+  }
+
+  diffToGitLines(diff) {
+    const lines = [];
+    
+    switch (diff.type) {
+      case 'added':
+        lines.push({
+          type: 'added',
+          prefix: '+',
+          text: `${diff.path}: ${JSON.stringify(diff.value)}`
+        });
+        break;
+        
+      case 'removed':
+        lines.push({
+          type: 'removed',
+          prefix: '-',
+          text: `${diff.path}: ${JSON.stringify(diff.value)}`
+        });
+        break;
+        
+      case 'modified':
+        lines.push({
+          type: 'removed',
+          prefix: '-',
+          text: `${diff.path}: ${JSON.stringify(diff.oldValue)}`
+        });
+        lines.push({
+          type: 'added',
+          prefix: '+',
+          text: `${diff.path}: ${JSON.stringify(diff.newValue)}`
+        });
+        break;
+    }
+    
+    return lines;
+  }
+
+  escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
 
   renderDiffItem(diff) {
