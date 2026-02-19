@@ -751,6 +751,13 @@ html, body {
   background: var(--bg-secondary);
   border-radius: var(--border-radius);
   overflow: hidden;
+  border: 2px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.compare-panel.drag-over {
+  border-color: var(--accent-cyan);
+  background: rgba(0, 212, 255, 0.05);
 }
 
 .compare-header {

@@ -128,6 +128,56 @@ export class CompareTab {
       this.jsonB = null;
       this.renderEmptyState();
     });
+
+    // Setup drag & drop for both panels
+    this.setupDragDrop(textareaA, statusA, (content) => {
+      textareaA.value = content;
+      this.jsonA = validate(textareaA, statusA);
+    });
+    
+    this.setupDragDrop(textareaB, statusB, (content) => {
+      textareaB.value = content;
+      this.jsonB = validate(textareaB, statusB);
+    });
+  }
+
+  setupDragDrop(textarea, status, onLoad) {
+    const panel = textarea.closest('.compare-panel');
+    
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+      panel.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      });
+    });
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+      panel.addEventListener(eventName, () => {
+        panel.classList.add('drag-over');
+      });
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+      panel.addEventListener(eventName, () => {
+        panel.classList.remove('drag-over');
+      });
+    });
+
+    panel.addEventListener('drop', (e) => {
+      const dt = e.dataTransfer;
+      const files = dt.files;
+
+      if (files.length > 0) {
+        const file = files[0];
+        if (file.type === 'application/json' || file.name.endsWith('.json')) {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            onLoad(e.target.result);
+          };
+          reader.readAsText(file);
+        }
+      }
+    });
   }
 
   performCompare() {
